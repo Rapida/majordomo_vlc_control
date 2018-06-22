@@ -1,11 +1,10 @@
-<?
+<?php
 /**
-* Blank
-*
-*
+* VLC Remote control 
 * @package project
-* @author Serge J. <jey@tut.by>
-* @copyright http://www.smartliving.ru/ (c)
+* @author Wizard <sergejey@gmail.com>
+* @copyright http://majordomo.smartliving.ru/ (c)
+* @version 0.1 (wizard, 10:06:37 [Jun 22, 2018])
 */
 //
 //
@@ -19,7 +18,7 @@ class vlc_control extends module {
 */
 function vlc_control() {
   $this->name="vlc_control";
-  $this->title="VLC remote control";
+  $this->title="VLC Remote control";
   $this->module_category="<#LANG_SECTION_APPLICATIONS#>";
   $this->checkInstalled();
 }
@@ -30,7 +29,7 @@ function vlc_control() {
 *
 * @access public
 */
-function saveParams($data = 1) {
+function saveParams($data=1) {
  $p=array();
  if (IsSet($this->id)) {
   $p["id"]=$this->id;
@@ -40,6 +39,9 @@ function saveParams($data = 1) {
  }
  if (IsSet($this->edit_mode)) {
   $p["edit_mode"]=$this->edit_mode;
+ }
+ if (IsSet($this->data_source)) {
+  $p["data_source"]=$this->data_source;
  }
  if (IsSet($this->tab)) {
   $p["tab"]=$this->tab;
@@ -58,6 +60,7 @@ function getParams() {
   global $mode;
   global $view_mode;
   global $edit_mode;
+  global $data_source;
   global $tab;
   if (isset($id)) {
    $this->id=$id;
@@ -70,6 +73,9 @@ function getParams() {
   }
   if (isset($edit_mode)) {
    $this->edit_mode=$edit_mode;
+  }
+  if (isset($data_source)) {
+   $this->data_source=$data_source;
   }
   if (isset($tab)) {
    $this->tab=$tab;
@@ -100,9 +106,8 @@ function run() {
   $out['EDIT_MODE']=$this->edit_mode;
   $out['MODE']=$this->mode;
   $out['ACTION']=$this->action;
-  if ($this->single_rec) {
-   $out['SINGLE_REC']=1;
-  }
+  $out['DATA_SOURCE']=$this->data_source;
+  $out['TAB']=$this->tab;
   $this->data=$out;
   $p=new parser(DIR_TEMPLATES.$this->name."/".$this->name.".html", $this->data, $this);
   $this->result=$p->result;
@@ -115,6 +120,52 @@ function run() {
 * @access public
 */
 function admin(&$out) {
+ $this->getConfig();
+ $out['API_URL']=$this->config['API_URL'];
+ if (!$out['API_URL']) {
+  $out['API_URL']='http://';
+ }
+ $out['API_KEY']=$this->config['API_KEY'];
+ $out['API_USERNAME']=$this->config['API_USERNAME'];
+ $out['API_PASSWORD']=$this->config['API_PASSWORD'];
+ if ($this->view_mode=='update_settings') {
+   global $api_url;
+   $this->config['API_URL']=$api_url;
+   global $api_key;
+   $this->config['API_KEY']=$api_key;
+   global $api_username;
+   $this->config['API_USERNAME']=$api_username;
+   global $api_password;
+   $this->config['API_PASSWORD']=$api_password;
+   $this->saveConfig();
+   $this->redirect("?");
+ }
+ if (isset($this->data_source) && !$_GET['data_source'] && !$_POST['data_source']) {
+  $out['SET_DATASOURCE']=1;
+ }
+ if ($this->data_source=='vlc_control_terminals' || $this->data_source=='') {
+  if ($this->view_mode=='' || $this->view_mode=='search_vlc_control_terminals') {
+   $this->search_vlc_control_terminals($out);
+  }
+  if ($this->view_mode=='edit_vlc_control_terminals') {
+   $this->edit_vlc_control_terminals($out, $this->id);
+  }
+  if ($this->view_mode=='delete_vlc_control_terminals') {
+   $this->delete_vlc_control_terminals($this->id);
+   $this->redirect("?data_source=vlc_control_terminals");
+  }
+ }
+ if (isset($this->data_source) && !$_GET['data_source'] && !$_POST['data_source']) {
+  $out['SET_DATASOURCE']=1;
+ }
+ if ($this->data_source=='vlc_control_cache') {
+  if ($this->view_mode=='' || $this->view_mode=='search_vlc_control_cache') {
+   $this->search_vlc_control_cache($out);
+  }
+  if ($this->view_mode=='edit_vlc_control_cache') {
+   $this->edit_vlc_control_cache($out, $this->id);
+  }
+ }
 }
 /**
 * FrontEnd
@@ -127,97 +178,99 @@ function usual(&$out) {
  $this->admin($out);
 }
 /**
+* vlc_control_terminals search
+*
+* @access public
+*/
+ function search_vlc_control_terminals(&$out) {
+  require(DIR_MODULES.$this->name.'/vlc_control_terminals_search.inc.php');
+ }
+/**
+* vlc_control_terminals edit/add
+*
+* @access public
+*/
+ function edit_vlc_control_terminals(&$out, $id) {
+  require(DIR_MODULES.$this->name.'/vlc_control_terminals_edit.inc.php');
+ }
+/**
+* vlc_control_terminals delete record
+*
+* @access public
+*/
+ function delete_vlc_control_terminals($id) {
+  $rec=SQLSelectOne("SELECT * FROM vlc_control_terminals WHERE ID='$id'");
+  // some action for related tables
+  SQLExec("DELETE FROM vlc_control_terminals WHERE ID='".$rec['ID']."'");
+ }
+/**
+* vlc_control_cache search
+*
+* @access public
+*/
+ function search_vlc_control_cache(&$out) {
+  require(DIR_MODULES.$this->name.'/vlc_control_cache_search.inc.php');
+ }
+/**
+* vlc_control_cache edit/add
+*
+* @access public
+*/
+ function edit_vlc_control_cache(&$out, $id) {
+  require(DIR_MODULES.$this->name.'/vlc_control_cache_edit.inc.php');
+ }
+ function processCycle() {
+ $this->getConfig();
+  //to-do
+ }
+/**
 * Install
 *
 * Module installation routine
 *
 * @access private
 */
- function install($parent_name = "") {
-   $className = 'vlc_control';
-   $objectName = 'VlcControl';
-   $methodName = 'Control';
-   $properties = array('LastPlayed', 'VolumeLevel', 'PlayTerminal', 'On');
-   $code = 'include_once(DIR_MODULES.\'vlc_control/vlc_control.class.php\');
-      $vlc_control=new vlc_control();
-
-      if(is_array($params))
-      {
-        if(isset($params[\'track\'])) $vlc_control->change_track($params[\'track\'],$vlc_control);
-        if(isset($params[\'cmd\'])) $vlc_control->control($params[\'cmd\']);
-        if(isset($params[\'vol\'])) $vlc_control->set_volume($params[\'vol\'],$vlc_control);
-      }
-      else
-      {
-        if($params==\'play\' || $params==\'stop\')  $vlc_control->control($params);
-        else if(strpos($params, "vol")===0) $vlc_control->set_volume((int)substr($params,3),$vlc_control);
-        else if(strpos($params, "sta:")===0) $vlc_control->change_track(substr($params,4),$vlc_control);
-      }';
-
-      $rec = SQLSelectOne("SELECT ID FROM classes WHERE TITLE LIKE '" . DBSafe($className) . "'");
-      if (!$rec['ID']) {
-          $rec = array();
-          $rec['TITLE'] = $className;
-          //$rec['PARENT_LIST']='0';
-          $rec['DESCRIPTION'] = 'VLC Media Player remote control';
-          $rec['ID'] = SQLInsert('classes', $rec);
-
-      }
-
-      $obj_rec = SQLSelectOne("SELECT ID FROM objects WHERE CLASS_ID='" . $rec['ID'] . "' AND TITLE LIKE '" . DBSafe($objectName) . "'");
-      if (!$obj_rec['ID']) {
-          $obj_rec = array();
-          $obj_rec['CLASS_ID'] = $rec['ID'];
-          $obj_rec['TITLE'] = $objectName;
-          $obj_rec['DESCRIPTION'] = 'Settings';
-          $obj_rec['ID'] = SQLInsert('objects', $obj_rec);
-      }
-
-      $metod_rec = SQLSelectOne("SELECT ID FROM methods WHERE OBJECT_ID='" . $obj_rec['ID'] . "' AND TITLE LIKE '" . DBSafe($metodName) . "'");
-      if (!$metod_rec['ID']) {
-        $metod_rec = array();
-        $metod_rec['OBJECT_ID'] = $obj_rec['ID'];
-        $metod_rec['CLASS_ID'] = 0;
-        $metod_rec['TITLE'] = $metodName;
-        $metod_rec['DESCRIPTION'] = '';
-        $metod_rec['CODE'] = $code;
-        $metod_rec['ID'] = SQLInsert('methods', $metod_rec);
-      }
-      else
-      {
-        $metod_rec['CODE'] = $code;
-        SQLUpdate('methods', $metod_rec);
-      }
-
-      for ($i = 0; $i < count($propertis); $i++) {
-          $prop_rec = SQLSelectOne("SELECT ID FROM properties WHERE OBJECT_ID='" . $obj_rec['ID'] . "' AND TITLE LIKE '" . DBSafe($propertis[$i]) . "'");
-          if (!$prop_rec['ID']) {
-              $prop_rec = array();
-              $prop_rec['TITLE'] = $propertis[$i];
-              $prop_rec['OBJECT_ID'] = $obj_rec['ID'];
-              $prop_rec['ID'] = SQLInsert('properties', $prop_rec);
-          }
-      }
-
-  parent::install($parent_name);
+ function install($data='') {
+  parent::install();
  }
-
- function uninstall()
- {
-   SQLExec("drop table if exists vlc_control");
+/**
+* Uninstall
+*
+* Module uninstall routine
+*
+* @access public
+*/
+ function uninstall() {
+  SQLExec('DROP TABLE IF EXISTS vlc_control_terminals');
+  SQLExec('DROP TABLE IF EXISTS vlc_control_cache');
+  parent::uninstall();
  }
-
- function dbInstall($data)
- {
-
-$data = <<<EOD
- vlc_control: ID int(10) unsigned NOT NULL auto_increment
- vlc_control: stations text
- vlc_control: name text
+/**
+* dbInstall
+*
+* Database installation routine
+*
+* @access private
+*/
+ function dbInstall($data) {
+/*
+vlc_control_terminals - 
+vlc_control_cache - 
+*/
+  $data = <<<EOD
+ vlc_control_terminals: ID int(10) unsigned NOT NULL auto_increment
+ vlc_control_terminals: TITLE varchar(100) NOT NULL DEFAULT ''
+ vlc_control_cache: ID int(10) unsigned NOT NULL auto_increment
+ vlc_control_cache: TITLE varchar(100) NOT NULL DEFAULT ''
+ vlc_control_cache: VALUE varchar(255) NOT NULL DEFAULT ''
+ vlc_control_cache: termonal_ID int(10) NOT NULL DEFAULT '0'
 EOD;
-        parent::dbInstall($data);
-}
-
+  parent::dbInstall($data);
+ }
 // --------------------------------------------------------------------
 }
-?>
+/*
+*
+* TW9kdWxlIGNyZWF0ZWQgSnVuIDIyLCAyMDE4IHVzaW5nIFNlcmdlIEouIHdpemFyZCAoQWN0aXZlVW5pdCBJbmMgd3d3LmFjdGl2ZXVuaXQuY29tKQ==
+*
+*/
